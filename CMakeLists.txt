@@ -9,3 +9,6 @@ target_include_directories(math INTERFACE include/)
 
 add_executable(dummy src/dummy.cpp)
 target_link_libraries(dummy math)
+
+add_executable(16_2_elgamal src/16_2_elgamal.cpp)
+target_link_libraries(16_2_elgamal math)

@@ -1,12 +1,23 @@
 #pragma once
 
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <optional>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 namespace math {
+template <typename T>
+std::ostream &operator<<(std::ostream &os, std::optional<T> const &x) {
+  if (x) {
+    return os << *x;
+  }
+  return os << "(none)";
+}
+
 unsigned indent = 0;
 bool is_aligned = false;
 
@@ -233,6 +244,11 @@ struct variable {
     format();
   }
 
+  variable(T value, const char *name)
+      : _value{std::move(value)}, _name{name}, _counter{0} {
+    format();
+  }
+
   variable(variable const &o, const char *name)
       : _value{o._value}, _name{name}, _counter{0} {
     format();
@@ -305,7 +321,12 @@ struct variable {
 
   bool operator!=(const T &o) const { return !(*this == o); }
 
+  bool operator<(const T &o) const { return _value < o; }
+  // TODO: more operators
+
   explicit operator real_type() const { return _value; }
+
+  real_type v() const { return _value; }
 };
 
 template <typename T>
@@ -346,20 +367,36 @@ auto rename(T &&value, const char *name) {
 }
 
 struct aligned {
-  aligned() {
+  aligned() { open(); }
+
+  void open() const {
     trace("$\n\\begin{aligned}[t]\\\\\n");
     indent += 1;
     is_aligned = true;
   }
 
+  // break an aligned block
+  void b() const {
+    if (is_aligned) {
+      close();
+      open();
+    }
+  }
+
+  void close() const {
+    if (is_aligned) {
+      indent -= 1;
+      trace("\\end{aligned}\n$\n");
+      is_aligned = false;
+    }
+  }
+
   aligned(aligned &&) = default;
 
-  ~aligned() {
-    indent -= 1;
-    trace("\\end{aligned}\n$\n");
-    is_aligned = false;
-  }
+  ~aligned() { close(); }
 };
+
+// TODO: implement Z_{n}
 
 template <typename T>
 T z_exp(T b, T e, T m) {
@@ -383,6 +420,103 @@ T z_exp(T b, T e, T m) {
   }
 
   return acc;
+}
+
+template <typename T>
+struct eea_result {
+  T s;
+  T t;
+  T gcd;
+};
+
+template <typename T>
+struct h {
+  T &a0;
+  T &a1;
+  T &a2;
+
+  h(T *arr, std::uint64_t offset)
+      : a0{arr[offset % 3]},
+        a1{arr[(offset + 2) % 3]},
+        a2{arr[(offset + 1) % 3]} {}
+};
+
+template <typename T>
+h(T *, std::uint64_t)->h<T>;
+
+template <bool Trace = false, typename T>
+eea_result<T> eea(T r0, T r1) noexcept {
+  static_assert(std::is_integral_v<T>, "eea only works for integrals");
+
+  if (r0 <= r1) {
+    std::swap(r0, r1);
+  }
+
+  T r[3] = {r0, r1, 0};
+  T s[3] = {1, 0, 0};
+  T t[3] = {0, 1, 0};
+
+  if constexpr (Trace) {
+    trace(
+        "\\begin{tabular}{|c|c|c|c|c|}\n\\hline\ni & r & q & s & t \\\\ "
+        "\\hline \\hline\n");
+    for (auto i = 0; i < 2; ++i) {
+      trace(i, " & ", r[i], " & & ", s[i], " & ", t[i], "\\\\ \\hline \n");
+    }
+  }
+
+  std::uint64_t i = 2;
+  for (; r[(i + 2) % 3] != 0; ++i) {
+    // This might be oddly named.
+    // x0 = x_i, x1 = x_{i-1}, x2 = x_{i-2}
+    auto [r0, r1, r2] = h{r, i};
+    auto [s0, s1, s2] = h{s, i};
+    auto [t0, t1, t2] = h{t, i};
+
+    r0 = r2 % r1;
+
+    const auto q = (r2 - r0) / r1;
+
+    s0 = s2 - q * s1;
+    t0 = t2 - q * t1;
+
+    if constexpr (Trace) {
+      trace(i, " & ", r0, " & ", q, " & ", s0, " & ", t0, "\\\\ \\hline \n");
+    }
+  }
+
+  if constexpr (Trace) {
+    trace("\\end{tabular}\\\\\n");
+  }
+
+  return {s[(i + 1) % 3], t[(i + 1) % 3], r[(i + 1) % 3]};
+}
+
+template <typename T>
+// returns dlog_a(b) mod p
+std::optional<T> baby_step_giant_step(T a, T b, T p) {
+  static_assert(std::is_integral_v<T>,
+                "baby_step_giant_step only works for integrals");
+
+  const auto m = (T)ceil(sqrt(p));
+  auto [_, a_inv, __] = eea(a, p);
+  a_inv = (a_inv + p) % p;
+  const auto a_inv_m = z_exp(a_inv, m, p);
+
+  // a^{x_b} to x_b
+  std::unordered_map<T, T> lookup;
+  for (T i = 0; i < m; ++i) {
+    lookup[z_exp(a, i, p)] = i;
+  }
+
+  for (T i = 0; i < m; ++i) {
+    const auto res = (z_exp(a_inv_m, i, p) * b) % p;
+    if (const auto r = lookup.find(res); r != lookup.end()) {
+      return {i * m + r->second};
+    }
+  }
+
+  return {};
 }
 
 }  // namespace math

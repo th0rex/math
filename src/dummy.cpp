@@ -27,5 +27,8 @@ int main() {
         z_exp(variable{5u, "alpha"}, variable{10u, "d"}, variable{13u, "p"}),
         "k_{pub, B}");
   }
+
+  std::cout << baby_step_giant_step(17, 101, 167) << "\n";
+
   return 0;
 }
