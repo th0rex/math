@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+project(math LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+add_library(math INTERFACE)
+target_include_directories(math INTERFACE include/)
+
+add_executable(dummy src/dummy.cpp)
+target_link_libraries(dummy math)
