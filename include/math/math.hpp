@@ -60,7 +60,7 @@ template <op o, typename L, typename R>
 struct expression;
 
 template <op o, typename L, typename R>
-auto make_expression(L l, R r) {
+expression<o, L, R> make_expression(L l, R r) {
   return expression<o, L, R>{std::move(l), std::move(r)};
 }
 
@@ -225,8 +225,19 @@ struct get_value<variable<T>> {
 };
 
 template <typename T>
+struct is_expression : std::false_type {};
+
+template <op o, typename L, typename R>
+struct is_expression<expression<o, L, R>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_expression_v =
+    is_expression<std::remove_reference_t<T>>::value;
+
+template <typename T>
 struct variable {
   using real_type = T;
+  static_assert(!is_expression_v<T>, "can't have variables of expressions");
 
   T _value;
   const char *_name;
@@ -236,13 +247,7 @@ struct variable {
     trace<true>(_name, is_aligned ? " &= " : " = ", _value, "\\\\\n");
   }
 
-  variable(T &&value)
-      : _value{std::forward<T>(value)}, _name{nullptr}, _counter{0} {}
-
-  variable(T &&value, const char *name)
-      : _value{std::forward<T>(value)}, _name{name}, _counter{0} {
-    format();
-  }
+  variable(T value) : _value{std::move(value)}, _name{nullptr}, _counter{0} {}
 
   variable(T value, const char *name)
       : _value{std::move(value)}, _name{name}, _counter{0} {
@@ -251,30 +256,47 @@ struct variable {
 
   variable(variable const &o, const char *name)
       : _value{o._value}, _name{name}, _counter{0} {
-    format();
+    if (o._counter == 0) {
+      trace<true>(_name, is_aligned ? " &= " : " = ", o._name, " = ", _value,
+                  "\\\\\n");
+    } else {
+      trace<true>(_name, is_aligned ? " &= " : " = ", o._name, "_{", o._counter,
+                  "} = ", _value, "\\\\\n");
+    }
+  }
+
+  template <op o, typename L, typename R>
+  variable(expression<o, L, R> expr, const char *name)
+      : _value{}, _name{name}, _counter{0} {
+    trace<true>(_name, is_aligned ? " &= " : " = ");
+
+    format_expr<expression<o, L, R>>::format(expr);
+    _value = get_value<expression<o, L, R>>::value(std::move(expr));
+    trace(" = ", _value, "\\\\\n");
   }
 
   variable(variable const &) = default;
   variable(variable &&) = default;
+  variable &operator=(variable &&) = default;
 
   template <typename A>
-  auto operator+(A a) {
+  auto operator+(A a) const {
     return make_expression<op::ADD>(*this, std::move(a));
   }
   template <typename A>
-  auto operator-(A a) {
+  auto operator-(A a) const {
     return make_expression<op::SUB>(*this, std::move(a));
   }
   template <typename A>
-  auto operator*(A a) {
+  auto operator*(A a) const {
     return make_expression<op::MUL>(*this, std::move(a));
   }
   template <typename A>
-  auto operator/(A a) {
+  auto operator/(A a) const {
     return make_expression<op::DIV>(*this, std::move(a));
   }
   template <typename A>
-  auto operator%(A a) {
+  auto operator%(A a) const {
     return make_expression<op::MOD>(*this, std::move(a));
   }
 
@@ -322,7 +344,9 @@ struct variable {
   bool operator!=(const T &o) const { return !(*this == o); }
 
   bool operator<(const T &o) const { return _value < o; }
-  // TODO: more operators
+  bool operator>(const T &o) const { return _value > o; }
+  bool operator<=(const T &o) const { return _value <= o; }
+  bool operator>=(const T &o) const { return _value >= o; }
 
   explicit operator real_type() const { return _value; }
 
@@ -359,11 +383,23 @@ template <typename T>
 constexpr bool is_variable_v = is_variable<std::remove_reference_t<T>>::value;
 
 template <typename T>
+auto unpack(T &&t) {
+  if constexpr (is_variable_v<T>) {
+    return t.v();
+  } else {
+    return std::forward<T>(t);
+  }
+}
+
+template <typename T>
 auto rename(T &&value, const char *name) {
   if constexpr (is_variable_v<T>) {
-    return variable{value, name};
+    return variable{std::forward<T>(value), name};
+  } else if constexpr (is_expression_v<T>) {
+    return variable<real_type_t<T>>{std::forward<T>(value), name};
+  } else {
+    return std::forward<T>(value);
   }
-  return std::forward<T>(value);
 }
 
 struct aligned {
@@ -371,7 +407,7 @@ struct aligned {
 
   void open() const {
     trace("$\n\\begin{aligned}[t]\\\\\n");
-    indent += 1;
+    indent++;
     is_aligned = true;
   }
 
@@ -385,8 +421,8 @@ struct aligned {
 
   void close() const {
     if (is_aligned) {
-      indent -= 1;
-      trace("\\end{aligned}\n$\n");
+      indent--;
+      trace("\\end{aligned}\n$\\\\\n");
       is_aligned = false;
     }
   }
@@ -396,14 +432,24 @@ struct aligned {
   ~aligned() { close(); }
 };
 
-// TODO: implement Z_{n}
+// TODO: implement GF(2^n)
 
-template <typename T>
-T z_exp(T b, T e, T m) {
-  using real_type = real_type_t<T>;
+template <bool Pseudo = false, typename T, typename U, typename V>
+// square multiply
+T sqm(T b, U e, V m) {
+  using real_type = real_type_t<U>;
   static_assert(std::is_integral_v<real_type>,
-                "z_exp only works for integrals");
+                "sqm only works for integral exponents");
   constexpr auto bit_size = sizeof(real_type) * 8;
+
+  if constexpr (Pseudo) {
+    if (is_variable_v<T> && is_variable_v<U> && is_variable_v<V>) {
+      trace<true>(b._name, "^{", e._name, "} \\bmod ", m._name,
+                  is_aligned ? " &= " : " = ");
+    }
+
+    trace<true>(unpack(b), "^{", unpack(e), "} \\bmod ", unpack(m), "\\\\\n");
+  }
 
   if (e == 0) {
     return {1};
@@ -445,21 +491,26 @@ template <typename T>
 h(T *, std::uint64_t)->h<T>;
 
 template <bool Trace = false, typename T>
-eea_result<T> eea(T r0, T r1) noexcept {
-  static_assert(std::is_integral_v<T>, "eea only works for integrals");
+eea_result<real_type_t<T>> eea(T _r0, T _r1) noexcept {
+  using real_type = real_type_t<T>;
+  static_assert(std::is_integral_v<real_type>, "eea only works for integrals");
+
+  auto r0 = unpack(_r0);
+  auto r1 = unpack(_r1);
 
   if (r0 <= r1) {
     std::swap(r0, r1);
   }
 
-  T r[3] = {r0, r1, 0};
-  T s[3] = {1, 0, 0};
-  T t[3] = {0, 1, 0};
+  real_type r[3] = {r0, r1, 0};
+  real_type s[3] = {1, 0, 0};
+  real_type t[3] = {0, 1, 0};
 
   if constexpr (Trace) {
     trace(
         "\\begin{tabular}{|c|c|c|c|c|}\n\\hline\ni & r & q & s & t \\\\ "
         "\\hline \\hline\n");
+    indent++;
     for (auto i = 0; i < 2; ++i) {
       trace(i, " & ", r[i], " & & ", s[i], " & ", t[i], "\\\\ \\hline \n");
     }
@@ -486,6 +537,7 @@ eea_result<T> eea(T r0, T r1) noexcept {
   }
 
   if constexpr (Trace) {
+    indent--;
     trace("\\end{tabular}\\\\\n");
   }
 
@@ -501,16 +553,16 @@ std::optional<T> baby_step_giant_step(T a, T b, T p) {
   const auto m = (T)ceil(sqrt(p));
   auto [_, a_inv, __] = eea(a, p);
   a_inv = (a_inv + p) % p;
-  const auto a_inv_m = z_exp(a_inv, m, p);
+  const auto a_inv_m = sqm(a_inv, m, p);
 
   // a^{x_b} to x_b
   std::unordered_map<T, T> lookup;
   for (T i = 0; i < m; ++i) {
-    lookup[z_exp(a, i, p)] = i;
+    lookup[sqm(a, i, p)] = i;
   }
 
   for (T i = 0; i < m; ++i) {
-    const auto res = (z_exp(a_inv_m, i, p) * b) % p;
+    const auto res = (sqm(a_inv_m, i, p) * b) % p;
     if (const auto r = lookup.find(res); r != lookup.end()) {
       return {i * m + r->second};
     }

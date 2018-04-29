@@ -19,12 +19,12 @@ int main() {
 
   std::cout << "\n\n";
 
-  const auto x = z_exp(5u, 10u, 13u);
+  const auto x = sqm(5u, 10u, 13u);
   std::cout << "Square multiply: \\\\\n";
   {
     const auto _ = aligned{};
     const auto y = rename(
-        z_exp(variable{5u, "alpha"}, variable{10u, "d"}, variable{13u, "p"}),
+        sqm(variable{5u, "alpha"}, variable{10u, "d"}, variable{13u, "p"}),
         "k_{pub, B}");
   }
 
