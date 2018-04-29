@@ -4,15 +4,30 @@
 
 using namespace math;
 
+template <typename T>
+auto var(T t, const char* s) {
+  return variable<T, format_expr>{t, s};
+}
+
+template <typename T>
+auto var(variable<T, format_expr> const& v, const char* s) {
+  return variable{v, s};
+}
+
+template <op o, template <typename, bool> typename F, typename L, typename R>
+auto var(expression<o, F, L, R> e, const char* s) {
+  return variable{std::move(e), s};
+}
+
 int main() {
   {
     const auto _ = aligned{};
-    variable v{0, "i"};
+    auto v = var(0, "i");
     v += 1;
     v = v * v + v * 5;
     v %= 3;
 
-    variable x = v;
+    auto x = v;
     v *= 2;
     v = x + 5;
   }
@@ -23,9 +38,8 @@ int main() {
   std::cout << "Square multiply: \\\\\n";
   {
     const auto _ = aligned{};
-    const auto y = rename(
-        sqm(variable{5u, "alpha"}, variable{10u, "d"}, variable{13u, "p"}),
-        "k_{pub, B}");
+    const auto y =
+        var(sqm(var(5u, "alpha"), var(10u, "d"), var(13u, "p")), "k_{pub, B}");
   }
 
   std::cout << baby_step_giant_step(17, 101, 167) << "\n";
