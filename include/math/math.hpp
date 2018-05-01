@@ -51,23 +51,20 @@ struct get_real_type<T, std::void_t<typename T::real_type>> {
 template <typename T>
 using real_type_t = typename get_real_type<T>::type;
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 struct variable;
 
 enum class op { ADD, SUB, MUL, DIV, MOD };
 
-template <op o, template <typename, bool> typename Formatter, typename L,
-          typename R>
+template <op o, template <typename> typename Formatter, typename L, typename R>
 struct expression;
 
-template <op o, template <typename, bool> typename Formatter, typename L,
-          typename R>
+template <op o, template <typename> typename Formatter, typename L, typename R>
 expression<o, Formatter, L, R> make_expression(L l, R r) {
   return expression<o, Formatter, L, R>{std::move(l), std::move(r)};
 }
 
-template <op o, template <typename, bool> typename Formatter, typename L,
-          typename R>
+template <op o, template <typename> typename Formatter, typename L, typename R>
 struct expression {
   using real_type = std::common_type_t<real_type_t<L>, real_type_t<R>>;
 
@@ -119,35 +116,35 @@ struct get_value {
   constexpr static auto value(T t) { return t; }
 };
 
-template <template <typename, bool> typename F, typename L, typename R>
+template <template <typename> typename F, typename L, typename R>
 struct get_value<expression<op::ADD, F, L, R>> {
   constexpr static auto value(expression<op::ADD, F, L, R> e) {
     return get_value<L>::value(std::move(e._lhs)) +
            get_value<R>::value(std::move(e._rhs));
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
+template <template <typename> typename F, typename L, typename R>
 struct get_value<expression<op::SUB, F, L, R>> {
   constexpr static auto value(expression<op::SUB, F, L, R> e) {
     return get_value<L>::value(std::move(e._lhs)) -
            get_value<R>::value(std::move(e._rhs));
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
+template <template <typename> typename F, typename L, typename R>
 struct get_value<expression<op::MUL, F, L, R>> {
   constexpr static auto value(expression<op::MUL, F, L, R> e) {
     return get_value<L>::value(std::move(e._lhs)) *
            get_value<R>::value(std::move(e._rhs));
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
+template <template <typename> typename F, typename L, typename R>
 struct get_value<expression<op::DIV, F, L, R>> {
   constexpr static auto value(expression<op::DIV, F, L, R> e) {
     return get_value<L>::value(std::move(e._lhs)) /
            get_value<R>::value(std::move(e._rhs));
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
+template <template <typename> typename F, typename L, typename R>
 struct get_value<expression<op::MOD, F, L, R>> {
   constexpr static auto value(expression<op::MOD, F, L, R> e) {
     return get_value<L>::value(std::move(e._lhs)) %
@@ -160,11 +157,11 @@ constexpr bool format_expr_simple =
     std::is_integral_v<std::remove_reference_t<T>> ||
     std::is_floating_point_v<std::remove_reference_t<T>>;
 
-template <typename T, bool = false>
-struct format_expr;
-
 template <typename T>
-struct format_expr<T, true> {
+struct format_expr {
+  // TODO: use sfinae
+  static_assert(format_expr_simple<T>, "T doesn't have operator<< overloaded");
+
   template <bool First>
   constexpr static void format(T const &t) {
     trace(t);
@@ -173,10 +170,10 @@ struct format_expr<T, true> {
 
 template <typename T, typename = void>
 struct format_delimited {
-  template <bool First, template <typename, bool> typename F>
+  template <bool First, template <typename> typename F>
   constexpr static void do_format(T const &t, const char *l, const char *r) {
     trace(l);
-    F<T, format_expr_simple<T>>::template format<First>(t);
+    F<T>::template format<First>(t);
     trace(r);
   }
 };
@@ -184,31 +181,29 @@ struct format_delimited {
 template <typename T>
 struct format_delimited<
     T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>>> {
-  template <bool First, template <typename, bool> typename F>
+  template <bool First, template <typename> typename F>
   constexpr static void do_format(T const &t, const char *, const char *) {
-    F<T, format_expr_simple<T>>::template format<First>(t);
+    F<T>::template format<First>(t);
   }
 };
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 struct format_delimited<variable<T, Formatter>, void> {
-  template <bool First, template <typename, bool> typename F>
+  template <bool First, template <typename> typename F>
   constexpr static void do_format(variable<T, Formatter> const &t, const char *,
                                   const char *) {
     // TODO: check that F == Formatter
-    Formatter<
-        variable<T, Formatter>,
-        format_expr_simple<variable<T, Formatter>>>::template format<First>(t);
+    Formatter<variable<T, Formatter>>::template format<First>(t);
   }
 };
 
-template <bool First, template <typename, bool> typename F, typename T>
+template <bool First, template <typename> typename F, typename T>
 void format_paren(T const &t) {
   format_delimited<T>::template do_format<First, F>(t, "\\left(", "\\right)");
 }
 
-template <template <typename, bool> typename F, typename L, typename R>
-struct format_expr<expression<op::ADD, F, L, R>, false> {
+template <template <typename> typename F, typename L, typename R>
+struct format_expr<expression<op::ADD, F, L, R>> {
   template <bool First>
   constexpr static void format(expression<op::ADD, F, L, R> const &e) {
     format_paren<false, F>(e._lhs);
@@ -216,8 +211,8 @@ struct format_expr<expression<op::ADD, F, L, R>, false> {
     format_paren<false, F>(e._rhs);
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
-struct format_expr<expression<op::SUB, F, L, R>, false> {
+template <template <typename> typename F, typename L, typename R>
+struct format_expr<expression<op::SUB, F, L, R>> {
   template <bool First>
   constexpr static void format(expression<op::SUB, F, L, R> const &e) {
     format_paren<false, F>(e._lhs);
@@ -225,8 +220,8 @@ struct format_expr<expression<op::SUB, F, L, R>, false> {
     format_paren<false, F>(e._rhs);
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
-struct format_expr<expression<op::MUL, F, L, R>, false> {
+template <template <typename> typename F, typename L, typename R>
+struct format_expr<expression<op::MUL, F, L, R>> {
   template <bool First>
   constexpr static void format(expression<op::MUL, F, L, R> const &e) {
     format_paren<false, F>(e._lhs);
@@ -234,8 +229,8 @@ struct format_expr<expression<op::MUL, F, L, R>, false> {
     format_paren<false, F>(e._rhs);
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
-struct format_expr<expression<op::DIV, F, L, R>, false> {
+template <template <typename> typename F, typename L, typename R>
+struct format_expr<expression<op::DIV, F, L, R>> {
   template <bool First>
   constexpr static void format(expression<op::DIV, F, L, R> const &e) {
     format_paren<false, F>(e._lhs);
@@ -243,8 +238,8 @@ struct format_expr<expression<op::DIV, F, L, R>, false> {
     format_paren<false, F>(e._rhs);
   }
 };
-template <template <typename, bool> typename F, typename L, typename R>
-struct format_expr<expression<op::MOD, F, L, R>, false> {
+template <template <typename> typename F, typename L, typename R>
+struct format_expr<expression<op::MOD, F, L, R>> {
   template <bool First>
   constexpr static void format(expression<op::MOD, F, L, R> const &e) {
     format_paren<false, F>(e._lhs);
@@ -253,7 +248,7 @@ struct format_expr<expression<op::MOD, F, L, R>, false> {
   }
 };
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 struct get_value<variable<T, Formatter>> {
   constexpr static typename variable<T, Formatter>::real_type value(
       variable<T, Formatter> const &v);
@@ -262,7 +257,7 @@ struct get_value<variable<T, Formatter>> {
 template <typename T>
 struct is_expression : std::false_type {};
 
-template <op o, template <typename, bool> typename F, typename L, typename R>
+template <op o, template <typename> typename F, typename L, typename R>
 struct is_expression<expression<o, F, L, R>> : std::true_type {};
 
 template <typename T>
@@ -272,13 +267,13 @@ constexpr bool is_expression_v =
 template <typename T>
 struct is_variable : std::false_type {};
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 struct is_variable<variable<T, Formatter>> : std::true_type {};
 
 template <typename T>
 constexpr bool is_variable_v = is_variable<std::remove_reference_t<T>>::value;
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 struct variable {
   using real_type = T;
   static_assert(!(is_expression_v<T> || is_variable_v<T>),
@@ -315,8 +310,7 @@ struct variable {
       : _value{}, _name{name}, _counter{0} {
     trace<true>(_name, is_aligned ? " &= " : " = ");
 
-    Formatter<decltype(expr),
-              format_expr_simple<decltype(expr)>>::template format<true>(expr);
+    Formatter<decltype(expr)>::template format<true>(expr);
     _value = get_value<expression<o, Formatter, L, R>>::value(std::move(expr));
     trace(" = ", _value, "\\\\\n");
   }
@@ -354,7 +348,7 @@ struct variable {
     assert(_name && "can't assign to temporary variables");
     _counter++;
     trace<true>(_name, "_{", _counter, is_aligned ? "} &= " : "} = ");
-    Formatter<A, format_expr_simple<A>>::template format<true>(a);
+    Formatter<A>::template format<true>(a);
     _value = get_value<A>::value(std::move(a));
     trace(" = ", _value, "\\\\\n");
     return *this;
@@ -402,14 +396,14 @@ struct variable {
 // template <typename T>
 // variable(T, const char *)->variable<T>;
 
-template <op o, template <typename, bool> typename F, typename L, typename R>
+template <op o, template <typename> typename F, typename L, typename R>
 variable(expression<o, F, L, R>, const char *)
     ->variable<real_type_t<expression<o, F, L, R>>, F>;
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 variable(variable<T, Formatter> const &, const char *)->variable<T, Formatter>;
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 struct format_expr<variable<T, Formatter>> {
   template <bool First>
   constexpr static void format(variable<T, Formatter> const &v) {
@@ -421,7 +415,7 @@ struct format_expr<variable<T, Formatter>> {
   }
 };
 
-template <typename T, template <typename, bool> typename Formatter>
+template <typename T, template <typename> typename Formatter>
 constexpr typename variable<T, Formatter>::real_type
 get_value<variable<T, Formatter>>::value(variable<T, Formatter> const &v) {
   return v._value;
@@ -612,6 +606,20 @@ std::optional<T> baby_step_giant_step(T a, T b, T p) {
   }
 
   return {};
+}
+
+template <template <typename> typename F>
+auto make_var_factory() {
+  return [](auto &&x, const char *s) {
+    using T = std::remove_const_t<std::remove_reference_t<decltype(x)>>;
+    if constexpr (is_variable_v<T>) {
+      return variable{x, s};
+    } else if constexpr (is_expression_v<T>) {
+      return variable{std::move(x), s};
+    } else {
+      return variable<T, F>{std::move(x), s};
+    }
+  };
 }
 
 }  // namespace math

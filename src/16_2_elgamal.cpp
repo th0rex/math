@@ -9,22 +9,7 @@ T sm(T b, U e, V m) {
   return sqm<true>(b, e, m);
 }
 
-// TODO: put this into som generic thing
-
-template <typename T>
-auto var(T t, const char* s) {
-  return variable<T, format_expr>{t, s};
-}
-
-template <typename T>
-auto var(variable<T, format_expr> const& v, const char* s) {
-  return variable{v, s};
-}
-
-template <op o, template <typename, bool> typename F, typename L, typename R>
-auto var(expression<o, F, L, R> e, const char* s) {
-  return variable{std::move(e), s};
-}
+auto var = make_var_factory<format_expr>();
 
 void elgamal(unsigned _p, unsigned _a, unsigned _d, unsigned _i, unsigned _x) {
   trace("Verschlüsseln: \\\\\n");
