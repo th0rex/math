@@ -28,7 +28,7 @@ template <bool First = false, typename... T>
 void trace(T &&... ts) {
   if constexpr (First) {
     for (auto i = 0; i < indent * 2; ++i) {
-      std::cout << ' ';
+      *out << ' ';
     }
   }
   (*out << ... << ts);
