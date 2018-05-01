@@ -9,13 +9,13 @@ T sm(T b, U e, V m) {
   return sqm<true>(b, e, m);
 }
 
-auto var = make_var_factory<format_expr>();
+auto var = make_var_factory<format_expr_with_value>();
 
 void elgamal(unsigned _p, unsigned _a, unsigned _d, unsigned _i, unsigned _x) {
   trace("Verschlüsseln: \\\\\n");
   const auto al = aligned();
 
-  const auto p = var(_p, "P");
+  const auto p = var(_p, "p");
   const auto a = var(_a, "\\alpha");
   const auto d = var(_d, "d");
   const auto i = var(_i, "i");

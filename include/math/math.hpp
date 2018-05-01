@@ -64,6 +64,25 @@ expression<o, Formatter, L, R> make_expression(L l, R r) {
   return expression<o, Formatter, L, R>{std::move(l), std::move(r)};
 }
 
+template <typename T>
+struct is_expression : std::false_type {};
+
+template <op o, template <typename> typename F, typename L, typename R>
+struct is_expression<expression<o, F, L, R>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_expression_v =
+    is_expression<std::remove_reference_t<T>>::value;
+
+template <typename T>
+struct is_variable : std::false_type {};
+
+template <typename T, template <typename> typename Formatter>
+struct is_variable<variable<T, Formatter>> : std::true_type {};
+
+template <typename T>
+constexpr bool is_variable_v = is_variable<std::remove_reference_t<T>>::value;
+
 template <op o, template <typename> typename Formatter, typename L, typename R>
 struct expression {
   using real_type = std::common_type_t<real_type_t<L>, real_type_t<R>>;
@@ -75,14 +94,23 @@ struct expression {
 
  private:
   expression(expression const &) = default;
+  expression &operator=(expression const &) = default;
 
  public:
   expression(expression &&) = default;
 
-  expression &operator=(expression const &) = delete;
-
   // so that we don't copy on accident
-  expression copy() { return *this; }
+  expression copy() const {
+    if constexpr (is_expression_v<L> && is_expression_v<R>) {
+      return {_lhs.copy(), _rhs.copy()};
+    } else if constexpr (is_expression_v<L>) {
+      return {_lhs.copy(), _rhs};
+    } else if constexpr (is_expression_v<R>) {
+      return {_lhs, _rhs.copy()};
+    } else {
+      return {_lhs, _rhs};
+    }
+  }
 
   template <typename B>
   auto operator+(B rhs) {
@@ -168,6 +196,57 @@ struct format_expr {
   }
 };
 
+template <typename T>
+struct format_expr_with_value {
+  template <bool First>
+  constexpr static void format(T &&t) {
+    format_expr<T>::template format<First>(std::forward<T>(t));
+  }
+
+  template <bool First>
+  constexpr static void format(T const &t) {
+    format_expr<T>::template format<First>(t);
+  }
+};
+
+template <op o, template <typename> typename F, typename L, typename R>
+struct format_expr_with_value<expression<o, F, L, R>> {
+  template <bool First>
+  constexpr static void format(expression<o, F, L, R> const &e) {
+    if constexpr (First) {
+      auto c = e.copy();
+
+      // Format it as usual
+      format_expr<expression<o, F, L, R>>::template format<false>(e);
+
+      const auto lhs = get_value<L>::value(std::move(c._lhs));
+      const auto rhs = get_value<R>::value(std::move(c._rhs));
+
+      trace(" = ", lhs);
+      switch (o) {
+        case op::ADD:
+          trace(" + ");
+          break;
+        case op::SUB:
+          trace(" - ");
+          break;
+        case op::MUL:
+          trace(" * ");
+          break;
+        case op::DIV:
+          trace(" / ");
+          break;
+        case op::MOD:
+          trace(" % ");
+          break;
+      };
+      trace(rhs);
+    } else {
+      format_expr<expression<o, F, L, R>>::template format<false>(e);
+    }
+  }
+};
+
 template <typename T, typename = void>
 struct format_delimited {
   template <bool First, template <typename> typename F>
@@ -192,7 +271,6 @@ struct format_delimited<variable<T, Formatter>, void> {
   template <bool First, template <typename> typename F>
   constexpr static void do_format(variable<T, Formatter> const &t, const char *,
                                   const char *) {
-    // TODO: check that F == Formatter
     Formatter<variable<T, Formatter>>::template format<First>(t);
   }
 };
@@ -253,25 +331,6 @@ struct get_value<variable<T, Formatter>> {
   constexpr static typename variable<T, Formatter>::real_type value(
       variable<T, Formatter> const &v);
 };
-
-template <typename T>
-struct is_expression : std::false_type {};
-
-template <op o, template <typename> typename F, typename L, typename R>
-struct is_expression<expression<o, F, L, R>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_expression_v =
-    is_expression<std::remove_reference_t<T>>::value;
-
-template <typename T>
-struct is_variable : std::false_type {};
-
-template <typename T, template <typename> typename Formatter>
-struct is_variable<variable<T, Formatter>> : std::true_type {};
-
-template <typename T>
-constexpr bool is_variable_v = is_variable<std::remove_reference_t<T>>::value;
 
 template <typename T, template <typename> typename Formatter>
 struct variable {
