@@ -237,7 +237,7 @@ struct format_expr_with_value<expression<o, F, L, R>> {
           trace(" / ");
           break;
         case op::MOD:
-          trace(" % ");
+          trace(" \\bmod ");
           break;
       };
       trace(rhs);
