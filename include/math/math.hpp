@@ -144,41 +144,46 @@ struct get_value {
   constexpr static auto value(T t) { return t; }
 };
 
-template <template <typename> typename F, typename L, typename R>
-struct get_value<expression<op::ADD, F, L, R>> {
-  constexpr static auto value(expression<op::ADD, F, L, R> e) {
-    return get_value<L>::value(std::move(e._lhs)) +
-           get_value<R>::value(std::move(e._rhs));
+template <op o, template <typename> typename F, typename L, typename R>
+struct get_value<expression<o, F, L, R>> {
+  constexpr static auto value(expression<o, F, L, R> e) {
+    auto lhs = get_value<L>::value(std::move(e._lhs));
+    auto rhs = get_value<R>::value(std::move(e._rhs));
+
+    switch (o) {
+      case op::ADD:
+        return lhs + rhs;
+      case op::SUB:
+        return lhs - rhs;
+      case op::MUL:
+        return lhs * rhs;
+      case op::DIV:
+        return lhs / rhs;
+      case op::MOD:
+        return lhs % rhs;
+    }
   }
 };
-template <template <typename> typename F, typename L, typename R>
-struct get_value<expression<op::SUB, F, L, R>> {
-  constexpr static auto value(expression<op::SUB, F, L, R> e) {
-    return get_value<L>::value(std::move(e._lhs)) -
-           get_value<R>::value(std::move(e._rhs));
-  }
-};
-template <template <typename> typename F, typename L, typename R>
-struct get_value<expression<op::MUL, F, L, R>> {
-  constexpr static auto value(expression<op::MUL, F, L, R> e) {
-    return get_value<L>::value(std::move(e._lhs)) *
-           get_value<R>::value(std::move(e._rhs));
-  }
-};
-template <template <typename> typename F, typename L, typename R>
-struct get_value<expression<op::DIV, F, L, R>> {
-  constexpr static auto value(expression<op::DIV, F, L, R> e) {
-    return get_value<L>::value(std::move(e._lhs)) /
-           get_value<R>::value(std::move(e._rhs));
-  }
-};
-template <template <typename> typename F, typename L, typename R>
-struct get_value<expression<op::MOD, F, L, R>> {
-  constexpr static auto value(expression<op::MOD, F, L, R> e) {
-    return get_value<L>::value(std::move(e._lhs)) %
-           get_value<R>::value(std::move(e._rhs));
-  }
-};
+
+constexpr void format_op(const op o) {
+  switch (o) {
+    case op::ADD:
+      trace(" + ");
+      break;
+    case op::SUB:
+      trace(" - ");
+      break;
+    case op::MUL:
+      trace(" * ");
+      break;
+    case op::DIV:
+      trace(" / ");
+      break;
+    case op::MOD:
+      trace(" \\bmod ");
+      break;
+  };
+}
 
 template <typename T>
 constexpr bool format_expr_simple =
@@ -223,23 +228,7 @@ struct format_expr_with_value<expression<o, F, L, R>> {
       const auto rhs = get_value<R>::value(std::move(c._rhs));
 
       trace(" = ", lhs);
-      switch (o) {
-        case op::ADD:
-          trace(" + ");
-          break;
-        case op::SUB:
-          trace(" - ");
-          break;
-        case op::MUL:
-          trace(" * ");
-          break;
-        case op::DIV:
-          trace(" / ");
-          break;
-        case op::MOD:
-          trace(" \\bmod ");
-          break;
-      };
+      format_op(o);
       trace(rhs);
     } else {
       format_expr<expression<o, F, L, R>>::template format<false>(e);
@@ -279,48 +268,12 @@ void format_paren(T const &t) {
   format_delimited<T>::template do_format<First, F>(t, "\\left(", "\\right)");
 }
 
-template <template <typename> typename F, typename L, typename R>
-struct format_expr<expression<op::ADD, F, L, R>> {
+template <op o, template <typename> typename F, typename L, typename R>
+struct format_expr<expression<o, F, L, R>> {
   template <bool First>
-  constexpr static void format(expression<op::ADD, F, L, R> const &e) {
+  constexpr static void format(expression<o, F, L, R> const &e) {
     format_paren<false, F>(e._lhs);
-    trace(" + ");
-    format_paren<false, F>(e._rhs);
-  }
-};
-template <template <typename> typename F, typename L, typename R>
-struct format_expr<expression<op::SUB, F, L, R>> {
-  template <bool First>
-  constexpr static void format(expression<op::SUB, F, L, R> const &e) {
-    format_paren<false, F>(e._lhs);
-    trace("-");
-    format_paren<false, F>(e._rhs);
-  }
-};
-template <template <typename> typename F, typename L, typename R>
-struct format_expr<expression<op::MUL, F, L, R>> {
-  template <bool First>
-  constexpr static void format(expression<op::MUL, F, L, R> const &e) {
-    format_paren<false, F>(e._lhs);
-    trace("*");
-    format_paren<false, F>(e._rhs);
-  }
-};
-template <template <typename> typename F, typename L, typename R>
-struct format_expr<expression<op::DIV, F, L, R>> {
-  template <bool First>
-  constexpr static void format(expression<op::DIV, F, L, R> const &e) {
-    format_paren<false, F>(e._lhs);
-    trace("/");
-    format_paren<false, F>(e._rhs);
-  }
-};
-template <template <typename> typename F, typename L, typename R>
-struct format_expr<expression<op::MOD, F, L, R>> {
-  template <bool First>
-  constexpr static void format(expression<op::MOD, F, L, R> const &e) {
-    format_paren<false, F>(e._lhs);
-    trace(" \\bmod ");
+    format_op(o);
     format_paren<false, F>(e._rhs);
   }
 };
