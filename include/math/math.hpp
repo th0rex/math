@@ -258,8 +258,7 @@ struct format_delimited {
 };
 
 template <typename T>
-struct format_delimited<
-    T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>>> {
+struct format_delimited<T, std::enable_if_t<format_expr_simple<T>>> {
   template <bool First, template <typename> typename F>
   constexpr static void do_format(T const &t, const char *, const char *) {
     F<T>::template format<First>(t);
