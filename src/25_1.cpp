@@ -54,15 +54,34 @@ auto make_cert(E& env, T dh_a, T dh_priv, T dh_p, T id, T k_e, T p, T d, T a) {
 
 template <typename E, typename T>
 bool elgamal_verify(E& env, T x, elgamal_sig<T> sig, T a, T b, T p) {
-  auto t = var((sm(b, sig.r, p) * sm(sig.r, sig.s, p)) % p, "t");
+  const auto t_1 = var(sm(b, sig.r, p), "t_1");
+  const auto t_2 = var(sm(sig.r, sig.s, p), "t_2");
+  auto t = var((t_1 * t_2) % p, "t");
+  env.b();
   auto u = var(sm(a, x, p), "u");
-  return t == u;
+  return t == u.v();
+}
+
+template <typename T, typename U>
+void print_cert(const char* name, cert<T, U> const& cert) {
+  trace("Cert_{", name, "}\\,\\text{:}\\\\");
+  trace("x &= ", cert.x.v(), "\\\\");
+  trace("sig &= [", cert.sig.r.v(), "\\,\\,\\text{,}\\,\\,", cert.sig.s.v(),
+        "]\\\\");
+}
+
+template <typename E, typename C, typename T>
+void verify_cert(E& env, C const& cert, T a, T b, T p) {
+  if (elgamal_verify(env, cert.x, cert.sig, a, b, p)) {
+    trace("\\text{t == u => Zertifikat ist valide}");
+  } else {
+    trace("\\text{t != u => Zertifikat ist nicht valide}");
+  }
+  env.b();
 }
 
 int main() {
   trace("\\item\n");
-  trace("$Cert_A$:\n\\\\");
-
   const auto al = aligned();
 
   const auto dh_p = var(107, "p");
@@ -75,20 +94,38 @@ int main() {
   const auto cert_alice =
       make_cert(al, dh_alpha, var(12, "a"), dh_p, var(65, "id"), var(29, "k_E"),
                 elgamal_p, elgamal_d, elgamal_alpha);
+  print_cert("A", cert_alice);
 
-  al.close();
-  trace("\\\\$Cert_B$:\n\\\\");
-  al.open();
+  al.b();
 
   const auto cert_bob =
       make_cert(al, dh_alpha, var(34, "b"), dh_p, var(66, "id"), var(71, "k_E"),
                 elgamal_p, elgamal_d, elgamal_alpha);
 
-  al.close();
-  trace("\\\\$Cert_C$:\n\\\\");
-  al.open();
+  print_cert("B", cert_bob);
+  al.b();
 
   const auto cert_charley =
       make_cert(al, dh_alpha, var(56, "c"), dh_p, var(67, "id"),
                 var(113, "k_E"), elgamal_p, elgamal_d, elgamal_alpha);
+
+  print_cert("C", cert_charley);
+  al.close();
+
+  trace("\\item\n");
+  al.open();
+
+  const auto elgamal_beta =
+      var(sm(elgamal_alpha, elgamal_d, elgamal_p), "\\beta");
+  al.b();
+
+  trace("\\text{Alice:}\\\\");
+  verify_cert(al, cert_alice, elgamal_alpha, elgamal_beta, elgamal_p);
+  al.b();
+  trace("\\text{Bob:}\\\\");
+  verify_cert(al, cert_bob, elgamal_alpha, elgamal_beta, elgamal_p);
+  al.b();
+  trace("\\text{Charley:}\\\\");
+  verify_cert(al, cert_charley, elgamal_alpha, elgamal_beta, elgamal_p);
+  al.b();
 }
