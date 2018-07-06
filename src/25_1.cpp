@@ -127,5 +127,22 @@ int main() {
   al.b();
   trace("\\text{Charley:}\\\\");
   verify_cert(al, cert_charley, elgamal_alpha, elgamal_beta, elgamal_p);
+  al.close();
+
+  trace("\\item\n");
+  al.open();
+
+  const auto k_priv_a = var(12, "a");
+  const auto k_priv_b = var(34, "b");
+  const auto k_priv_c = var(56, "c");
+  const auto k_pub_a = var(sm(dh_alpha, k_priv_a, dh_p), "k_{pub,A}");
+  const auto k_pub_b = var(sm(dh_alpha, k_priv_b, dh_p), "k_{pub,B}");
+  const auto k_pub_c = var(sm(dh_alpha, k_priv_c, dh_p), "k_{pub,C}");
   al.b();
+
+  const auto k_ab = var(sm(k_pub_b, k_priv_a, dh_p), "k_{AB}");
+  al.b();
+  const auto k_ac = var(sm(k_pub_c, k_priv_a, dh_p), "k_{AC}");
+  al.b();
+  const auto k_bc = var(sm(k_pub_c, k_priv_b, dh_p), "k_{BC}");
 }
