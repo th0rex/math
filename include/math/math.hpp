@@ -23,20 +23,19 @@ bool is_aligned = false;
 
 #ifdef DO_PRINT
 std::ostream *out = &std::cout;
+#endif
 
 template <bool First = false, typename... T>
 void trace(T &&... ts) {
+#ifdef DO_PRINT
   if constexpr (First) {
     for (auto i = 0; i < indent * 2; ++i) {
       *out << ' ';
     }
   }
   (*out << ... << ts);
-}
-#else
-template <typename... T>
-void trace(T &&... ts) {}
 #endif
+}
 
 template <typename T, typename = std::void_t<>>
 struct get_real_type {
